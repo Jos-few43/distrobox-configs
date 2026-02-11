@@ -109,15 +109,25 @@ if [ ! -S "${SSH_AUTH_SOCK:-}" ]; then
   echo 'eval "$(ssh-agent -s)" 2>/dev/null' >> ~/.bashrc
 fi
 
-# Install OpenCode CLI (if not present)
-echo "==> Checking OpenCode installation..."
-if [ ! -d ~/.opencode ]; then
-  echo "OpenCode not found in ~/.opencode"
-  echo "To install OpenCode, run: npm install -g @opencode/cli"
+# Set up OpenCode in container-specific location
+echo "==> Setting up OpenCode in /opt/opencode..."
+sudo mkdir -p /opt/opencode
+sudo chown $USER:$USER /opt/opencode
+
+# Copy from home if exists (for migration)
+if [ -d ~/.opencode ] && [ ! -d /opt/opencode/bin ]; then
+  echo "Migrating OpenCode from ~/.opencode to /opt/opencode..."
+  cp -r ~/.opencode/* /opt/opencode/
+  echo "Migration complete. You can remove ~/.opencode from host later."
+fi
+
+if [ ! -d /opt/opencode/bin ]; then
+  echo "OpenCode not found in /opt/opencode"
+  echo "To install OpenCode, install it and place in /opt/opencode"
 else
-  echo "OpenCode found at ~/.opencode"
-  if [ -f ~/.opencode/bin/opencode ]; then
-    echo "OpenCode version: $(~/.opencode/bin/opencode --version 2>/dev/null || echo 'unknown')"
+  echo "OpenCode found at /opt/opencode"
+  if [ -f /opt/opencode/bin/opencode ]; then
+    echo "OpenCode version: $(/opt/opencode/bin/opencode --version 2>/dev/null || echo 'unknown')"
   fi
 fi
 
@@ -129,8 +139,8 @@ mkdir -p ~/workspace/opencode-projects
 echo "==> Configuring environment variables..."
 cat >> ~/.bashrc << 'EOFBASHRC'
 
-# OpenCode Development Environment
-export OPENCODE_HOME="$HOME/.opencode"
+# OpenCode Development Environment (container-specific location)
+export OPENCODE_HOME="/opt/opencode"
 export PATH="$OPENCODE_HOME/bin:$PATH"
 
 # Bun
