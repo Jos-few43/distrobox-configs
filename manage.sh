@@ -45,6 +45,8 @@ Commands:
 
 Agents:
   opencode         OpenCode AI agent (Fedora 43)
+  openclaw         OpenClaw AI agent (Fedora 43)
+  litellm          LiteLLM API proxy (Fedora 43)
   cursor           Cursor IDE (Ubuntu 24.04)
   claude           Claude Code (Fedora 43)
   windsurf         Windsurf (Fedora 43)
@@ -71,6 +73,37 @@ create_opencode() {
   echo "  1. Run automated setup: $0 setup opencode"
   echo "  2. Run health check: $0 check opencode"
   echo "  3. Enter container: $0 enter opencode"
+}
+
+create_openclaw() {
+  info "Creating OpenClaw AI agent container..."
+
+  distrobox create \
+    --name openclaw-dev \
+    --image registry.fedoraproject.org/fedora:43 \
+    --yes
+
+  success "OpenClaw container created!"
+  info "Next steps:"
+  echo "  1. Run automated setup: $0 setup openclaw"
+  echo "  2. Run health check: $0 check openclaw"
+  echo "  3. Enter container: $0 enter openclaw"
+}
+
+create_litellm() {
+  info "Creating LiteLLM proxy container..."
+
+  distrobox create \
+    --name litellm-proxy \
+    --image registry.fedoraproject.org/fedora:43 \
+    --yes
+
+  success "LiteLLM container created!"
+  info "Next steps:"
+  echo "  1. Run automated setup: $0 setup litellm"
+  echo "  2. Configure API keys: cp ~/.litellm/.env.template ~/.litellm/.env"
+  echo "  3. Start proxy: distrobox enter litellm-proxy -- litellm --config ~/.litellm/config.yaml"
+  echo "  4. Access UI: http://localhost:4000/ui"
 }
 
 create_cursor() {
@@ -211,12 +244,14 @@ case "${1:-}" in
     agent="${2:-}"
     case "$agent" in
       opencode) create_opencode ;;
+      openclaw) create_openclaw ;;
+      litellm) create_litellm ;;
       cursor) create_cursor ;;
       claude) create_claude ;;
       windsurf) create_windsurf ;;
       *)
         error "Unknown agent: $agent"
-        echo "Valid agents: opencode, cursor, claude, windsurf"
+        echo "Valid agents: opencode, openclaw, litellm, cursor, claude, windsurf"
         exit 1
         ;;
     esac
