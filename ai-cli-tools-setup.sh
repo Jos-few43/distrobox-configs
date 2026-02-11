@@ -19,8 +19,8 @@ echo "[3/5] Installing Node.js 22..."
 curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
 sudo dnf install -y nodejs
 
-echo "[4/5] Installing AI CLI tools..."
-npm install -g \
+echo "[4/5] Installing AI CLI tools globally in container..."
+sudo npm install -g \
   @qwen-code/qwen-code \
   @google/gemini-cli
 
@@ -48,13 +48,17 @@ fi
 echo ""
 echo "==> Setup Complete!"
 echo ""
+echo "Package installation:"
+echo "  Installed to: /usr/lib/node_modules (system-wide)"
+echo "  Isolated from host: YES"
+echo ""
 echo "Available commands:"
 echo "  qwen      - Qwen Code interactive CLI"
 echo "  gemini    - Google Gemini CLI"
 echo ""
 echo "Configuration locations:"
-echo "  Qwen:   ~/.config/qwen-code/"
-echo "  Gemini: ~/.config/gemini-cli/"
+echo "  Qwen:   ~/.config/qwen-code/ (shared with host)"
+echo "  Gemini: ~/.config/gemini-cli/ (shared with host)"
 echo ""
 echo "Quick start:"
 echo "  qwen 'explain this code'      # One-shot query"

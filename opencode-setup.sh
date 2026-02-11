@@ -53,17 +53,17 @@ else
   echo "Bun already installed: $(bun --version)"
 fi
 
-# Install pnpm
+# Install pnpm globally in container (system-wide)
 echo "==> Installing pnpm..."
 if ! command -v pnpm &> /dev/null; then
-  npm install -g pnpm
+  sudo npm install -g pnpm
 else
   echo "pnpm already installed: $(pnpm --version)"
 fi
 
-# Install global TypeScript tools
+# Install global TypeScript tools (system-wide)
 echo "==> Installing TypeScript toolchain..."
-npm install -g typescript tsx @types/node
+sudo npm install -g typescript tsx @types/node
 
 # Install Docker CLI (for docker-based workflows)
 echo "==> Installing Docker CLI..."

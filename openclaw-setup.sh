@@ -6,17 +6,22 @@ echo "==> OpenClaw Container Setup"
 # Container should already have Node.js and OpenClaw from initial setup
 # This script is for any additional configuration
 
-echo "==> Verifying OpenClaw installation..."
-if command -v openclaw &> /dev/null; then
-  echo "OpenClaw version: $(openclaw --version)"
-else
-  echo "Installing OpenClaw..."
-  npm install -g openclaw
+echo "[1/3] Installing Node.js 22..."
+if ! command -v node &> /dev/null; then
+  curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
+  sudo dnf install -y nodejs
 fi
 
-# Ensure git is installed (needed for OpenClaw)
+echo "[2/3] Installing OpenClaw globally in container..."
+if command -v openclaw &> /dev/null; then
+  echo "✓ OpenClaw already installed: $(openclaw --version)"
+else
+  sudo npm install -g openclaw
+  echo "✓ OpenClaw installed: $(openclaw --version)"
+fi
+
+echo "[3/3] Ensuring git is installed..."
 if ! command -v git &> /dev/null; then
-  echo "==> Installing git..."
   sudo dnf install -y git
 fi
 
