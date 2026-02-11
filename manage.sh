@@ -47,6 +47,7 @@ Agents:
   opencode         OpenCode AI agent (Fedora 43)
   openclaw         OpenClaw AI agent (Fedora 43)
   litellm          LiteLLM API proxy (Fedora 43)
+  ai-cli-tools     AI CLI tools (Qwen Code, Gemini) (Fedora 43)
   cursor           Cursor IDE (Ubuntu 24.04)
   claude           Claude Code (Fedora 43)
   windsurf         Windsurf (Fedora 43)
@@ -104,6 +105,21 @@ create_litellm() {
   echo "  2. Configure API keys: cp ~/.litellm/.env.template ~/.litellm/.env"
   echo "  3. Start proxy: distrobox enter litellm-proxy -- litellm --config ~/.litellm/config.yaml"
   echo "  4. Access UI: http://localhost:4000/ui"
+}
+
+create_ai_cli_tools() {
+  info "Creating AI CLI tools container..."
+
+  distrobox create \
+    --name ai-cli-tools-dev \
+    --image registry.fedoraproject.org/fedora:43 \
+    --yes
+
+  success "AI CLI tools container created!"
+  info "Next steps:"
+  echo "  1. Run automated setup: $0 setup ai-cli-tools"
+  echo "  2. Enter container: $0 enter ai-cli-tools"
+  echo "  3. Use tools: qwen, gemini"
 }
 
 create_cursor() {
@@ -246,12 +262,13 @@ case "${1:-}" in
       opencode) create_opencode ;;
       openclaw) create_openclaw ;;
       litellm) create_litellm ;;
+      ai-cli-tools) create_ai_cli_tools ;;
       cursor) create_cursor ;;
       claude) create_claude ;;
       windsurf) create_windsurf ;;
       *)
         error "Unknown agent: $agent"
-        echo "Valid agents: opencode, openclaw, litellm, cursor, claude, windsurf"
+        echo "Valid agents: opencode, openclaw, litellm, ai-cli-tools, cursor, claude, windsurf"
         exit 1
         ;;
     esac
