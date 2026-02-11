@@ -3,14 +3,16 @@ set -euo pipefail
 
 echo "==> OpenCode Container Health Check"
 
-# Check if container is running
-if ! distrobox list | grep -q "opencode-dev.*Up"; then
+# Check if container is running (disable pipefail to avoid SIGPIPE from grep -q)
+set +o pipefail
+if ! distrobox list --no-color | grep -q "opencode-dev.*Up"; then
   echo "ERROR: opencode-dev container is not running"
   echo ""
   echo "To start the container, run:"
   echo "  distrobox enter opencode-dev"
   exit 1
 fi
+set -o pipefail
 
 echo "  [✓] Container is running"
 echo ""
@@ -60,17 +62,18 @@ distrobox enter opencode-dev -- bash -c '
   echo ""
   echo "==> OpenCode Installation"
 
-  if [ -d ~/.opencode ]; then
-    echo "  [✓] OpenCode directory exists"
+  if [ -d /opt/opencode ]; then
+    echo "  [✓] OpenCode directory exists at /opt/opencode"
 
-    if [ -f ~/.opencode/bin/opencode ]; then
-      OC_VERSION=$(~/.opencode/bin/opencode --version 2>/dev/null || echo "unknown")
+    if [ -f /opt/opencode/bin/opencode ]; then
+      OC_VERSION=$(/opt/opencode/bin/opencode --version 2>/dev/null || echo "unknown")
       echo "  [✓] OpenCode CLI available (version: $OC_VERSION)"
     else
-      echo "  [✗] OpenCode CLI not found at ~/.opencode/bin/opencode"
+      echo "  [✗] OpenCode CLI not found at /opt/opencode/bin/opencode"
     fi
   else
-    echo "  [✗] OpenCode directory missing at ~/.opencode"
+    echo "  [✗] OpenCode directory missing at /opt/opencode"
+    echo "  [!] Run the setup script to install OpenCode"
   fi
 
   echo ""
