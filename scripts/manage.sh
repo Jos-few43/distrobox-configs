@@ -96,7 +96,7 @@ create_litellm() {
 
   distrobox create \
     --name litellm-dev \
-    --image registry.fedoraproject.org/fedora:43 \
+    --image registry.fedoraproject.org/fedora:42 \
     --yes
 
   success "LiteLLM container created!"
