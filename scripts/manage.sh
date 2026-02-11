@@ -167,7 +167,7 @@ create_windsurf() {
 setup_agent() {
   local agent=$1
   local container="${agent}-dev"
-  local setup_script="$SCRIPT_DIR/${agent}-setup.sh"
+  local setup_script="$SCRIPT_DIR/../setup/${agent}-setup.sh"
 
   if [ ! -f "$setup_script" ]; then
     error "Setup script not found: $setup_script"
