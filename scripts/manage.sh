@@ -95,7 +95,7 @@ create_litellm() {
   info "Creating LiteLLM proxy container..."
 
   distrobox create \
-    --name litellm-proxy \
+    --name litellm-dev \
     --image registry.fedoraproject.org/fedora:43 \
     --yes
 
@@ -103,7 +103,7 @@ create_litellm() {
   info "Next steps:"
   echo "  1. Run automated setup: $0 setup litellm"
   echo "  2. Configure API keys: cp ~/.litellm/.env.template ~/.litellm/.env"
-  echo "  3. Start proxy: distrobox enter litellm-proxy -- litellm --config ~/.litellm/config.yaml"
+  echo "  3. Start proxy: distrobox enter litellm-dev -- litellm --config ~/.litellm/config.yaml"
   echo "  4. Access UI: http://localhost:4000/ui"
 }
 
@@ -195,6 +195,13 @@ check_agent() {
       bash "$SCRIPT_DIR/opencode-healthcheck.sh"
     else
       error "Health check script not found for opencode"
+      return 1
+    fi
+  elif [ "$agent" = "litellm" ]; then
+    if [ -f "$SCRIPT_DIR/litellm-healthcheck.sh" ]; then
+      bash "$SCRIPT_DIR/litellm-healthcheck.sh"
+    else
+      error "Health check script not found for litellm"
       return 1
     fi
   else
