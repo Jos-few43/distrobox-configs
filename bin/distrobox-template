@@ -1,0 +1,493 @@
+#!/bin/bash
+#
+# distrobox-template - CLI tool for creating OS template containers with modifiers
+# Usage: distrobox-template create <os> [flags]
+#
+
+set -euo pipefail
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="$SCRIPT_DIR/../lib"
+CONFIG_DIR="$SCRIPT_DIR/../config"
+MANIFESTS_DIR="$SCRIPT_DIR/../manifests"
+
+# Source libraries
+source "$LIB_DIR/base-images.sh"
+source "$LIB_DIR/modifiers.sh"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Global flags
+DRY_RUN=false
+VERBOSE=false
+
+# Print functions
+print_error() { echo -e "${RED}ERROR:${NC} $1" >&2; }
+print_success() { echo -e "${GREEN}SUCCESS:${NC} $1"; }
+print_warning() { echo -e "${YELLOW}WARNING:${NC} $1"; }
+print_info() { echo -e "${BLUE}INFO:${NC} $1"; }
+print_verbose() { [[ "$VERBOSE" == true ]] && echo -e "${BLUE}VERBOSE:${NC} $1"; }
+
+# Show help
+show_help() {
+    cat << 'EOF'
+Usage: distrobox-template <command> [options]
+
+Commands:
+  create <os> [flags]     Create a new template container
+  list                    List available base OS templates
+  export <name>           Export a container as an image
+  import <file>           Import an image as a template
+  create-vm <os> [flags]  Create a NixOS VM (separate from containers)
+
+Create Flags:
+  --minimal               Strip docs, man pages, locales, timezone data
+  --dev                   Install development tools
+  --pentest               Install penetration testing tools (Kali only)
+  --custom <packages>     Install custom packages (comma-separated)
+  --name <name>           Override auto-generated container name
+  --dry-run              Show what would be created without doing it
+  --verbose              Show detailed output
+  --help                 Show this help message
+
+OS Options:
+  arch                    Arch Linux (ghcr.io/archlinux/archlinux)
+  fedora                  Fedora (registry.fedoraproject.org/fedora)
+  debian                  Debian (debian:stable-slim)
+  ubuntu                  Ubuntu (ubuntu:minimal)
+  alpine                  Alpine Linux (alpine:latest)
+  kali                    Kali Linux (kalilinux/kali-rolling)
+  nixos                   NixOS VM only (use create-vm command)
+
+Examples:
+  distrobox-template create arch --minimal --dev
+  distrobox-template create debian --minimal --dry-run
+  distrobox-template create kali --pentest --name my-kali
+  distrobox-template create fedora --dev --custom "nodejs,npm"
+  distrobox-template create-vm nixos --minimal --dev
+
+Naming Convention:
+  Containers are named: <os>-<modifier>-<modifier>
+  Example: arch-minimal-dev, debian-minimal, kali-pentest
+
+For more information: https://github.com/yourusername/distrobox-templates
+EOF
+}
+
+# List available OS templates
+list_templates() {
+    echo "Available Base OS Templates:"
+    echo ""
+    printf "%-12s %-50s %-15s\n" "OS" "Image" "Type"
+    printf "%-12s %-50s %-15s\n" "---" "-----" "----"
+    
+    for os in arch fedora debian ubuntu alpine kali; do
+        local image=$(get_base_image "$os")
+        local type="Container"
+        printf "%-12s %-50s %-15s\n" "$os" "$image" "$type"
+    done
+    
+    echo ""
+    echo "VM Templates (requires virtualization):"
+    printf "%-12s %-50s %-15s\n" "nixos" "NixOS VM (QEMU/KVM)" "Virtual Machine"
+    echo ""
+    echo "Use 'create <os> --help' for more options"
+}
+
+# Parse modifiers from arguments
+parse_modifiers() {
+    local modifiers=""
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --minimal)
+                modifiers="${modifiers}minimal-"
+                shift
+                ;;
+            --dev)
+                modifiers="${modifiers}dev-"
+                shift
+                ;;
+            --pentest)
+                modifiers="${modifiers}pentest-"
+                shift
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    # Remove trailing dash
+    modifiers="${modifiers%-}"
+    echo "$modifiers"
+}
+
+# Generate container name
+generate_name() {
+    local os=$1
+    shift
+    local modifiers=$(parse_modifiers "$@")
+    
+    if [[ -z "$modifiers" ]]; then
+        echo "$os"
+    else
+        echo "${os}-${modifiers}"
+    fi
+}
+
+# Create container command
+create_container() {
+    local os=$1
+    shift
+    
+    # Parse arguments
+    local minimal=false
+    local dev=false
+    local pentest=false
+    local custom_packages=""
+    local custom_name=""
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --minimal)
+                minimal=true
+                shift
+                ;;
+            --dev)
+                dev=true
+                shift
+                ;;
+            --pentest)
+                pentest=true
+                shift
+                ;;
+            --custom)
+                custom_packages="$2"
+                shift 2
+                ;;
+            --name)
+                custom_name="$2"
+                shift 2
+                ;;
+            --dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            --verbose)
+                VERBOSE=true
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    # Validate OS
+    if ! is_valid_os "$os"; then
+        print_error "Unknown OS: $os"
+        print_info "Run 'distrobox-template list' to see available options"
+        exit 1
+    fi
+    
+    # Generate or use custom name
+    local container_name
+    if [[ -n "$custom_name" ]]; then
+        container_name="$custom_name"
+    else
+        # Reconstruct args for name generation
+        local name_args=""
+        [[ "$minimal" == true ]] && name_args="$name_args --minimal"
+        [[ "$dev" == true ]] && name_args="$name_args --dev"
+        [[ "$pentest" == true ]] && name_args="$name_args --pentest"
+        container_name=$(generate_name "$os" $name_args)
+    fi
+    
+    # Dry run output (check before requiring distrobox)
+    if [[ "$DRY_RUN" == true ]]; then
+        print_info "DRY RUN - Would create the following:"
+        echo ""
+        echo "Container Name: $container_name"
+        echo "Base OS: $os"
+        echo "Base Image: $(get_base_image "$os")"
+        echo ""
+        echo "Modifiers:"
+        [[ "$minimal" == true ]] && echo "  ✓ --minimal (strip docs, man pages, locales)"
+        [[ "$dev" == true ]] && echo "  ✓ --dev (install dev tools)"
+        [[ "$pentest" == true ]] && echo "  ✓ --pentest (install pentest tools)"
+        [[ -n "$custom_packages" ]] && echo "  ✓ --custom $custom_packages"
+        [[ -z "$custom_packages" && "$minimal" == false && "$dev" == false && "$pentest" == false ]] && echo "  (none)"
+        echo ""
+        echo "Estimated disk space: $(estimate_size "$os" "$minimal" "$dev" "$pentest")"
+        return 0
+    fi
+    
+    # Check if distrobox is installed (only when not in dry-run mode)
+    if ! command -v distrobox &> /dev/null; then
+        print_error "distrobox is not installed or not in PATH"
+        print_info "On Bazzite, try: ujust distrobox"
+        exit 1
+    fi
+    
+    # Check if container already exists
+    if distrobox list | grep -q "^$container_name$"; then
+        print_error "Container '$container_name' already exists"
+        print_info "Remove it first with: distrobox rm $container_name"
+        exit 1
+    fi
+    
+    print_info "Creating template: $container_name"
+    print_verbose "Base image: $(get_base_image "$os")"
+    
+    # Create base container
+    local base_image=$(get_base_image "$os")
+    print_info "Pulling base image (this may take a while)..."
+    
+    if ! distrobox create --name "$container_name" --image "$base_image" --yes; then
+        print_error "Failed to create base container"
+        exit 1
+    fi
+    
+    print_success "Base container created: $container_name"
+    
+    # Apply modifiers
+    if [[ "$minimal" == true ]]; then
+        print_info "Applying --minimal cleanup..."
+        if ! apply_minimal "$container_name" "$os"; then
+            print_warning "Minimal cleanup had issues, but continuing..."
+        fi
+    fi
+    
+    if [[ "$dev" == true ]]; then
+        print_info "Installing development tools..."
+        if ! apply_dev "$container_name" "$os"; then
+            print_warning "Dev tools installation had issues, but continuing..."
+        fi
+    fi
+    
+    if [[ "$pentest" == true ]]; then
+        print_info "Installing penetration testing tools..."
+        if ! apply_pentest "$container_name" "$os"; then
+            print_warning "Pentest tools installation had issues, but continuing..."
+        fi
+    fi
+    
+    if [[ -n "$custom_packages" ]]; then
+        print_info "Installing custom packages: $custom_packages"
+        if ! apply_custom_packages "$container_name" "$os" "$custom_packages"; then
+            print_warning "Custom package installation had issues, but continuing..."
+        fi
+    fi
+    
+    print_success "Template '$container_name' created successfully!"
+    print_info "Enter with: distrobox enter $container_name"
+}
+
+# Create NixOS VM
+create_nixos_vm() {
+    local args=("$@")
+    
+    # Check for dry-run
+    local is_dry_run=false
+    for arg in "$@"; do
+        if [[ "$arg" == "--dry-run" ]]; then
+            is_dry_run=true
+            break
+        fi
+    done
+    
+    if [[ "$is_dry_run" == true ]]; then
+        print_info "DRY RUN - Would create NixOS VM"
+        echo ""
+        echo "NixOS VMs are created using QEMU/KVM"
+        echo "Requirements:"
+        echo "  - Nix package manager (nix)"
+        echo "  - QEMU"
+        echo "  - KVM support (optional but recommended)"
+        echo ""
+        echo "See: nixos-vm --help for more details"
+        return 0
+    fi
+    
+    # Check if nixos-vm helper exists
+    if [[ -f "$LIB_DIR/vm-nixos.sh" ]]; then
+        source "$LIB_DIR/vm-nixos.sh"
+        create_nixos_vm_helper "$@"
+    else
+        print_error "NixOS VM support not yet implemented"
+        print_info "This feature requires NixOS tools. See README.md for setup instructions."
+        exit 1
+    fi
+}
+
+# Export container as image
+export_container() {
+    local name=$1
+    local output_file="${2:-$name.tar.gz}"
+    
+    if [[ -z "$name" ]]; then
+        print_error "Container name required"
+        print_info "Usage: distrobox-template export <name> [output-file]"
+        exit 1
+    fi
+    
+    if ! distrobox list | grep -q "^$name$"; then
+        print_error "Container '$name' not found"
+        exit 1
+    fi
+    
+    print_info "Exporting container '$name' to $output_file..."
+    
+    # Use podman/docker export
+    if command -v podman &> /dev/null; then
+        podman export "$name" | gzip > "$output_file"
+    elif command -v docker &> /dev/null; then
+        docker export "$name" | gzip > "$output_file"
+    else
+        print_error "Neither podman nor docker found"
+        exit 1
+    fi
+    
+    print_success "Exported to: $output_file"
+}
+
+# Import image as container
+import_image() {
+    local file=$1
+    local name=${2:-}
+    
+    if [[ -z "$file" ]]; then
+        print_error "Image file required"
+        print_info "Usage: distrobox-template import <file> [name]"
+        exit 1
+    fi
+    
+    if [[ ! -f "$file" ]]; then
+        print_error "File not found: $file"
+        exit 1
+    fi
+    
+    # Auto-generate name from filename if not provided
+    if [[ -z "$name" ]]; then
+        name=$(basename "$file" .tar.gz)
+        name=$(basename "$name" .tar)
+    fi
+    
+    print_info "Importing $file as '$name'..."
+    
+    # Import using podman/docker
+    if command -v podman &> /dev/null; then
+        cat "$file" | gunzip | podman import - "$name"
+    elif command -v docker &> /dev/null; then
+        cat "$file" | gunzip | docker import - "$name"
+    else
+        print_error "Neither podman nor docker found"
+        exit 1
+    fi
+    
+    print_success "Imported as image: $name"
+    print_info "Create container with: distrobox create --image $name --name <name>"
+}
+
+# Estimate container size
+estimate_size() {
+    local os=$1
+    local minimal=$2
+    local dev=$3
+    local pentest=$4
+    
+    local base_size
+    case $os in
+        alpine) base_size="~50 MB" ;;
+        debian|ubuntu) base_size="~100 MB" ;;
+        arch|fedora) base_size="~500 MB" ;;
+        kali) base_size="~1.5 GB" ;;
+        *) base_size="~500 MB" ;;
+    esac
+    
+    local total="$base_size"
+    
+    if [[ "$minimal" == true ]]; then
+        total="$total - 20-50% savings"
+    fi
+    
+    if [[ "$dev" == true ]]; then
+        total="$total + ~200 MB"
+    fi
+    
+    if [[ "$pentest" == true ]]; then
+        total="$total + ~3-5 GB"
+    fi
+    
+    echo "$total"
+}
+
+# Main command dispatcher
+main() {
+    local command="${1:-}"
+    
+    case $command in
+        create)
+            shift
+            if [[ $# -eq 0 ]] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+                show_help
+                exit 0
+            fi
+            local os="$1"
+            shift
+            create_container "$os" "$@"
+            ;;
+        list)
+            list_templates
+            ;;
+        export)
+            shift
+            export_container "$@"
+            ;;
+        import)
+            shift
+            import_image "$@"
+            ;;
+        create-vm)
+            shift
+            if [[ $# -eq 0 ]] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+                echo "Usage: distrobox-template create-vm nixos [flags]"
+                echo ""
+                echo "Creates a NixOS VM using QEMU/KVM"
+                echo ""
+                echo "Flags:"
+                echo "  --minimal    Strip unnecessary packages"
+                echo "  --dev        Install development tools"
+                echo "  --dry-run    Show what would be created"
+                exit 0
+            fi
+            create_nixos_vm "$@"
+            ;;
+        --help|-h|help)
+            show_help
+            ;;
+        "")
+            show_help
+            exit 1
+            ;;
+        *)
+            print_error "Unknown command: $command"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Run main
+main "$@"

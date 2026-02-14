@@ -1,0 +1,8 @@
+# Development packages list
+# Format: os:package1,package2,package3
+
+arch:base-devel,git,vim,curl,wget,tree,htop,jq,zip,unzip,tar,openssl
+fedora:@development-tools,git,vim,curl,wget,tree,htop,jq,zip,unzip,tar,openssl
+ubuntu:build-essential,git,vim,curl,wget,tree,htop,jq,zip,unzip,tar,openssl,software-properties-common
+kali:build-essential,git,vim,curl,wget,tree,htop,jq,zip,unzip,tar,openssl
+alpine:build-base,git,vim,curl,wget,tree,htop,jq,zip,unzip,tar,openssl
