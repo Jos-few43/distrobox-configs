@@ -12,7 +12,7 @@ check() {
 
 echo "=== ai-agents verification ==="
 check "Container exists" "distrobox list | grep -q 'ai-agents'"
-check "opencode installed" "distrobox enter ai-agents -- which opencode"
+check "opencode installed" "distrobox enter ai-agents -- bash -c 'source /etc/profile.d/ai-agents.sh 2>/dev/null; which opencode || ls ~/.opencode/bin/opencode'"
 check "gemini accessible" "distrobox enter ai-agents -- bash -c 'ls ~/.local/node-v22.22.0-linux-x64/bin/gemini 2>/dev/null || which gemini'"
 check "qwen installed" "distrobox enter ai-agents -- which qwen"
 check "OpenCode config exists" "test -f /var/home/yish/opt-ai-agents/opencode/opencode.json"
